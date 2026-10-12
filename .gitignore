@@ -1,0 +1,26 @@
+# Local and temporary files
+.DS_Store
+*.swp
+*.tmp
+*.bak
+
+# Packet captures may contain addresses, hostnames, or payload data.
+*.pcap
+*.pcapng
+
+# Raw logs are reviewed and sanitized before publication.
+raw-logs/
+
+# Local environment and secrets
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Tool output not intended for the repository
+suricata-output/
+eve.json
+fast.log
+stats.log
