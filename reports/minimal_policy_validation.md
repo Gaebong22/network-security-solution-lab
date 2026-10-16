@@ -28,9 +28,13 @@
 
 Gateway→Server `200 OK`와 Client→Server SSH 성공으로 서비스 부재·경로 부재를 배제했다. 같은 시각 Gateway에서 `IN=enp0s1 OUT=enp0s2 ... DPT=8080 SYN`인 `[UFW BLOCK]` 기록 3건을 확인했으므로, 이 연결 시도의 차단 지점은 Gateway UFW 전달 정책이다. 공개용 로그 발췌에서는 원본의 MAC 주소와 임시 포트를 제외했다.
 
-## 남은 검증
+## 재부팅 후 확인
 
-- 재부팅 후 정적 경로, forwarding, UFW 규칙과 관리 SSH 유지 확인
+- Gateway: WAN·LAN·관리 주소와 경로 유지, `net.ipv4.ip_forward=1`, UFW active·기본 입력/전달 deny·두 SSH 허용 규칙 유지. Mac→Gateway SSH와 Client→Server SSH 재접속 성공.
+- Client: 별도 재부팅 후 Mac→Gateway→Client SSH 접속 성공, Server행 경로 `via 10.10.10.1` 유지.
+- Server: 별도 재부팅 후 Mac→Gateway→Server SSH 접속 성공, `10.20.20.10/24`와 Client행 경로 `via 10.20.20.1` 유지.
+
+재부팅 후 TCP/8080 차단 실험은 반복하지 않았다. 차단 근거는 재부팅 전의 실제 UFW 로그와 정책이며, 재부팅 후에는 규칙 유지와 SSH 허용 경로를 확인했다.
 
 테스트가 끝난 뒤 Server에서 임시 Python HTTP 서비스를 `Ctrl+C`로 종료했다. `ss -lnt '( sport = :8080 )'`에는 LISTEN 항목이 없었다.
 

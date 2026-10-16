@@ -1,24 +1,24 @@
 # Network Security Solution Lab
 
-Ubuntu 기반의 소규모 네트워크를 설계하고 방화벽과 IDS를 구축한 뒤, 패킷과 로그를 이용해 정상 통신·차단·탐지·장애 상황을 검증하는 프로젝트다.
+Ubuntu 기반의 소규모 격리 네트워크를 설계하고 Gateway 방화벽의 최소 허용 정책, 정상 통신·차단 및 경로 장애를 검증하는 프로젝트다. IDS와 패킷 분석은 후속 확장 계획이다.
 
 첫 번째 `Ubuntu Security Hardening` 프로젝트가 단일 서버 내부의 보안 통제를 다뤘다면, 이 프로젝트는 여러 시스템 사이의 트래픽 흐름과 네트워크 보안 솔루션의 구축·기술지원 과정을 다룬다.
 
-> 현재 상태: Client–Server 정적 경로, Gateway IPv4 forwarding과 UFW 최소 허용 정책을 적용했다. Client→Server SSH는 성공했고, 임시 HTTP/8080은 Gateway에서 응답·Client에서 시간 초과였으며 Gateway UFW 차단 로그를 확인했다. 임시 서비스는 종료했고 재부팅 후 지속성 검증은 남아 있다. IDS는 지원 후 확장 범위다.
+> 현재 상태: 지원 전 최소 실습 범위의 구성·검증 완료. Client–Server 정적 경로, Gateway IPv4 forwarding과 UFW 최소 허용 정책을 적용했다. Client→Server SSH 허용과 HTTP/8080 차단을 확인했고, 세 VM의 재부팅 후 주소·경로·Gateway 방화벽 설정 및 SSH 접속을 재확인했다. IDS는 지원 후 확장 범위다.
 
 ## 지금 어디까지 했나
 
 | 항목 | 상태 | 확인한 내용 |
 | --- | --- | --- |
 | UTM 격리망 `lab-wan`, `lab-lan` | 완료 | 두 Host Network 구성 |
-| Security Gateway | 기본 구성 완료 | WAN·LAN 고정 IP, Mac에서 관리용 SSH 접속 |
-| Test Client | 기본 구성 완료 | 고정 IP 설정, Gateway로 ping, Mac에서 Gateway 경유 SSH 접속 |
-| Protected Server | 기본 구성 완료 | `10.20.20.10/24` 설정, Gateway LAN ping 3/3, Mac에서 Gateway 경유 SSH 접속 |
+| Security Gateway | 재부팅 검증 완료 | WAN·LAN·관리 주소, forwarding=1, UFW active·최소 허용 규칙, Mac 관리 SSH 유지 |
+| Test Client | 재부팅 검증 완료 | `10.10.10.10/24`, Server행 경로 `via 10.10.10.1`, Mac에서 Gateway 경유 SSH 접속 |
+| Protected Server | 재부팅 검증 완료 | `10.20.20.10/24`, Client행 경로 `via 10.20.20.1`, Mac에서 Gateway 경유 SSH 접속 |
 | Gateway 자동 업데이트 | 이전 작업 종료 확인 | `dpkg --audit` 빈 출력, 실패한 서비스 0개. 적용 가능한 업데이트 22개는 별도 관리 필요 |
-| 라우팅·방화벽 | 기능 검증 중 | SSH 전달 허용, HTTP/8080 차단 로그 확인. 재부팅 검증 필요 |
+| 라우팅·방화벽 | 최소 범위 검증 완료 | Client→Server SSH 전달, HTTP/8080 차단 로그, Gateway 재부팅 후 SSH 전달 확인 |
 | Suricata IDS | 지원 후 확장 | 설치·탐지 결과를 현재 포트폴리오 성과로 주장하지 않음 |
 
-바로 다음 작업은 재부팅 후 설정 유지와 접속을 검증하는 것이다. 자세한 기록은 [진행 상태](docs/PROJECT_STATUS.md)에 남긴다.
+지원용 최소 범위의 실제 검증 결과는 [정책 검증 기록](reports/minimal_policy_validation.md)과 [경로 장애 분석](reports/client_route_troubleshooting.md)에 정리했다. 제출 전에는 공개 자료를 최종 검토하고 이력서·자기소개서에 연결할 핵심 성과를 선별한다. 자세한 기록은 [진행 상태](docs/PROJECT_STATUS.md)에 남긴다.
 
 ## 목표
 
@@ -62,6 +62,7 @@ Protected Server
 - [ ] 변경 전 네트워크·서비스·방화벽 상태 수집
 - [x] Gateway 라우팅과 최소 허용 방화벽 정책 적용
 - [x] SSH 허용 및 미허용 TCP/8080 차단 원인 검증
+- [x] 세 VM 재부팅 후 주소·경로·Gateway 정책 및 관리·전달 SSH 재검증
 - [ ] `tcpdump`·Wireshark로 정상·차단 패킷 비교
 - [ ] Suricata 설치, 탐지 테스트와 로그 분석
 - [ ] 장애 재현, 원인 분석과 복구
