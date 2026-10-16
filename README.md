@@ -4,7 +4,7 @@ Ubuntu 기반의 소규모 네트워크를 설계하고 방화벽과 IDS를 구�
 
 첫 번째 `Ubuntu Security Hardening` 프로젝트가 단일 서버 내부의 보안 통제를 다뤘다면, 이 프로젝트는 여러 시스템 사이의 트래픽 흐름과 네트워크 보안 솔루션의 구축·기술지원 과정을 다룬다.
 
-> 현재 상태: 실습망 구축 중. Gateway·Client 연결은 확인했고, Server는 설치·로그인까지 완료했다. 라우팅·방화벽·IDS는 아직 적용하지 않았다.
+> 현재 상태: Client–Server 정적 경로, Gateway IPv4 forwarding과 UFW 최소 허용 정책을 적용했다. Client→Server SSH는 성공했고, 임시 HTTP/8080은 Gateway에서 응답·Client에서 시간 초과였으며 Gateway UFW 차단 로그를 확인했다. 임시 서비스는 종료했고 재부팅 후 지속성 검증은 남아 있다. IDS는 지원 후 확장 범위다.
 
 ## 지금 어디까지 했나
 
@@ -13,11 +13,12 @@ Ubuntu 기반의 소규모 네트워크를 설계하고 방화벽과 IDS를 구�
 | UTM 격리망 `lab-wan`, `lab-lan` | 완료 | 두 Host Network 구성 |
 | Security Gateway | 기본 구성 완료 | WAN·LAN 고정 IP, Mac에서 관리용 SSH 접속 |
 | Test Client | 기본 구성 완료 | 고정 IP 설정, Gateway로 ping, Mac에서 Gateway 경유 SSH 접속 |
-| Protected Server | 설치 완료 | Ubuntu 설치와 콘솔 로그인. 고정 IP·Gateway 연결은 아직 미확인 |
-| Gateway 자동 업데이트 | 점검 필요 | `soft lockup` 경고 기록. 이후 SSH 접속은 됐지만 업데이트 완료·재부팅 검증 전 |
-| 라우팅·방화벽·Suricata | 미착수 | 정책 적용이나 탐지 결과 없음 |
+| Protected Server | 기본 구성 완료 | `10.20.20.10/24` 설정, Gateway LAN ping 3/3, Mac에서 Gateway 경유 SSH 접속 |
+| Gateway 자동 업데이트 | 이전 작업 종료 확인 | `dpkg --audit` 빈 출력, 실패한 서비스 0개. 적용 가능한 업데이트 22개는 별도 관리 필요 |
+| 라우팅·방화벽 | 기능 검증 중 | SSH 전달 허용, HTTP/8080 차단 로그 확인. 재부팅 검증 필요 |
+| Suricata IDS | 지원 후 확장 | 설치·탐지 결과를 현재 포트폴리오 성과로 주장하지 않음 |
 
-바로 다음 작업은 Server의 인터페이스와 Netplan 파일을 확인한 뒤 `lab-lan` 고정 IP를 설정하는 것이다. Gateway 자동 업데이트가 끝났는지 확인하기 전에는 강제 재부팅이나 별도 패키지 작업을 하지 않는다. 자세한 기록은 [진행 상태](docs/PROJECT_STATUS.md)에 남긴다.
+바로 다음 작업은 재부팅 후 설정 유지와 접속을 검증하는 것이다. 자세한 기록은 [진행 상태](docs/PROJECT_STATUS.md)에 남긴다.
 
 ## 목표
 
@@ -44,23 +45,23 @@ Security Gateway / IDS
     | lab-lan
     v
 Protected Server
-  - nginx
   - SSH
+  - 임시 HTTP 테스트 서비스 (nginx는 후속 확장)
   - system and application logs
 ```
 
-세 시스템을 UTM의 격리된 가상 네트워크에서 실행한다. 현재는 Server의 네트워크 설정과 VM 간 라우팅이 남아 있다. 외부 시스템이나 허가받지 않은 대상을 스캔하거나 시험하지 않는다.
+세 시스템을 UTM의 격리된 가상 네트워크에서 실행한다. 지원 전 최소 범위는 정적 경로, Gateway 최소 허용 정책, 허용·차단 검증 및 장애 사례 1건이다. 패킷 분석과 Suricata는 지원 후 확장한다. 외부 시스템이나 허가받지 않은 대상을 스캔하거나 시험하지 않는다.
 
 ## 진행 계획
 
 - [x] 요구사항, 주소 계획, UTM 격리망 구성
 - [x] Gateway·Client 설치 및 같은 구간 통신 확인
 - [x] Server 설치 및 첫 로그인
-- [ ] Server 고정 IP 설정과 Gateway LAN 연결 확인
-- [ ] Gateway 자동 업데이트 상태 점검 및 재부팅 후 연결 재검증
+- [x] Server 고정 IP 설정과 Gateway LAN 연결 확인
+- [x] Gateway 이전 자동 업데이트 작업 종료와 패키지 상태 점검
 - [ ] 변경 전 네트워크·서비스·방화벽 상태 수집
-- [ ] Gateway 라우팅과 최소 허용 방화벽 정책 적용
-- [ ] HTTP·SSH 허용 및 미허용 포트 차단 테스트
+- [x] Gateway 라우팅과 최소 허용 방화벽 정책 적용
+- [x] SSH 허용 및 미허용 TCP/8080 차단 원인 검증
 - [ ] `tcpdump`·Wireshark로 정상·차단 패킷 비교
 - [ ] Suricata 설치, 탐지 테스트와 로그 분석
 - [ ] 장애 재현, 원인 분석과 복구
@@ -71,6 +72,8 @@ Protected Server
 - 네트워크 구성도와 주소 계획
 - 방화벽 정책표
 - 정상·차단·탐지 테스트 시나리오
+- [최소 허용 정책 검증 기록](reports/minimal_policy_validation.md)
+- [Client 경로 장애 분석](reports/client_route_troubleshooting.md)
 - Wireshark·tcpdump 패킷 분석
 - Suricata alert 분석
 - 장애 분석 보고서
