@@ -1,69 +1,58 @@
-# 실습 환경 설계
+# 실습 환경과 적용 정책
 
-## 1. 설계 원칙
+## 구성 원칙
 
-- 기존 `Ubuntu Security Hardening` 서버와 분리한다.
-- 모든 테스트는 UTM 내부의 격리된 가상 네트워크에서 수행한다.
-- 여러 VM이 같은 격리망을 공유할 수 있도록 UTM의 QEMU backend와 Host Network를 사용한다.
-- 인터넷 연결은 package 설치가 필요한 구간에서만 사용한다.
-- 변경 전 VM snapshot 또는 설정 백업을 만든다.
-- gateway를 우회해 protected server에 직접 접근하지 못하도록 구성한다.
+- 본인 소유의 UTM/QEMU Ubuntu VM 3대만 실습 대상으로 사용했다.
+- Client와 Server를 서로 다른 UTM Host Network에 두어 구간 간 패킷이 Gateway를 지나도록 설계했다.
+- 관리용 UTM Shared Network는 Gateway의 별도 NIC에 연결했다. Client·Server에 관리망 주소를 부여하지 않았다.
+- 두 Host Network는 DHCP를 제공하지 않아 실습망 주소와 상대 대역 경로를 Netplan으로 설정했다.
 
-## 2. VM 구성안
+## 실제 확인한 인터페이스와 경로
 
-| 시스템 | 역할 | 권장 자원 | Network interface |
-| --- | --- | --- | --- |
-| Test Client | 정상·차단·탐지 트래픽 생성 | 1 CPU, 1 GB RAM | `lab-wan` |
-| Security Gateway | routing, firewall, Suricata, packet capture | 2 CPU, 2 GB RAM | `lab-wan`, `lab-lan` |
-| Protected Server | nginx, SSH, system/application log | 1~2 CPU, 1.5 GB RAM | `lab-lan` |
-
-호스트 메모리는 16 GB이므로 세 VM을 동시에 실행할 수 있도록 합계 약 4.5 GB로 시작한다. 실제 부하를 확인한 뒤 필요한 경우 조정한다.
-
-UTM의 Host Network는 여러 QEMU VM이 같은 격리망을 공유하게 만들 수 있지만 DHCP를 제공하지 않는다. 따라서 이 프로젝트에서는 각 VM에 주소를 수동으로 설정한다. `Emulated VLAN`은 VM마다 별도의 VLAN을 생성하므로 이 구성의 VM 간 공유망 용도로 사용하지 않는다.
-
-## 3. 논리 구성
+| VM | NIC | 네트워크 | IPv4 | 상대 대역 경로 |
+| --- | --- | --- | --- | --- |
+| Test Client | `enp0s1` | `lab-wan` | `10.10.10.10/24` | `10.20.20.0/24 via 10.10.10.1` |
+| Security Gateway | `enp0s1` | `lab-wan` | `10.10.10.1/24` | 두 실습망 직결 |
+| Security Gateway | `enp0s2` | `lab-lan` | `10.20.20.1/24` | 두 실습망 직결 |
+| Security Gateway | `enp0s3` | UTM Shared Network | DHCP 관리 주소 | 관리망 기본 경로 |
+| Protected Server | `enp0s1` | `lab-lan` | `10.20.20.10/24` | `10.10.10.0/24 via 10.20.20.1` |
 
 ```text
-                 lab-wan                       lab-lan
+Mac 관리 단말 ---- SSH ----> Gateway enp0s3 (Shared Network)
 
-+-------------+          +--------------------------------+          +------------------+
-| Test Client |----------| Security Gateway / IDS         |----------| Protected Server |
-| Ubuntu      |          | NIC 1: WAN / NIC 2: LAN        |          | nginx, SSH       |
-+-------------+          | routing, firewall, Suricata    |          +------------------+
-                         +--------------------------------+
+Client enp0s1          Gateway enp0s1 / enp0s2          Server enp0s1
+10.10.10.10/24 -- lab-wan -- 10.10.10.1/24
+                                 | IPv4 forwarding + UFW
+                              10.20.20.1/24 -- lab-lan -- 10.20.20.10/24
 ```
 
-## 4. 주소 계획
+`lab-wan`은 인터넷 WAN이 아니라 Client 측 실습 구간 이름이다. Server에는 인터넷 기본 경로를 설정하지 않았고, Client도 이 실습에서 Server 대역으로 향하는 명시적 경로만 추가했다. Gateway의 관리망 기본 경로는 실습망 두 개 사이의 전달 경로와 구분한다.
 
-초기 실습 주소는 다음과 같이 시작한다. 실제 evidence를 공개할 때는 아래 placeholder로 치환한다.
+## Gateway UFW 정책
 
-| 구간 | 항목 | 초기 실습 주소 | 공개 표기 |
-| --- | --- | --- | --- |
-| WAN | Test Client | `10.10.10.10/24` | `<CLIENT_IP>` |
-| WAN | Gateway WAN | `10.10.10.1/24` | `<GATEWAY_WAN_IP>` |
-| LAN | Gateway LAN | `10.20.20.1/24` | `<GATEWAY_LAN_IP>` |
-| LAN | Protected Server | `10.20.20.10/24` | `<SERVER_LAN_IP>` |
-| WAN | Subnet | `10.10.10.0/24` | `<LAB_WAN_SUBNET>` |
-| LAN | Subnet | `10.20.20.0/24` | `<LAB_LAN_SUBNET>` |
+| 조건 | 동작 | 목적 |
+| --- | --- | --- |
+| 관리 NIC로 들어오는 Mac 관리 주소의 TCP/22 | 입력 허용 | Gateway 관리 SSH 유지 |
+| `enp0s1`로 들어온 Client의 Server TCP/22가 `enp0s2`로 나감 | 전달 허용 | 통제된 SSH 연결 검증 |
+| 그 밖의 입력·전달 | 기본 deny | 명시하지 않은 흐름 제한 |
+| Gateway 자체의 출력 | 기본 allow | VM의 자체 송신 허용; 엄격한 출력 정책을 구현한 것은 아님 |
 
-초기 gateway는 Test Client에서 `10.10.10.1`, Protected Server에서 `10.20.20.1`이 된다. 외부 인터넷 연결은 별도의 임시 Shared Network interface를 사용할 때만 허용하고, 구축 완료 후 제거 여부를 검토한다.
+IPv4 forwarding은 `net.ipv4.ip_forward=1`이며, UFW 상태는 active다. 실제 규칙·통신·로그 검증은 [정책 검증 기록](../reports/minimal_policy_validation.md)에 있다. TCP/8080 차단 결과를 다른 포트 전체의 실측 차단 결과로 일반화하지 않는다.
 
-## 5. 예정 통신 정책
+적용한 핵심 명령의 형태는 다음과 같다. 관리 주소는 공개용 placeholder이며 그대로 실행하는 값이 아니다.
 
-| Source | Destination | Service | 초기 정책 | 목적 |
-| --- | --- | --- | --- | --- |
-| Test Client | Protected Server | HTTP/80 | Allow | 정상 웹 연결 검증 |
-| Test Client | Protected Server | SSH/22 | Allow 또는 관리 source 제한 | 관리 연결 검증 |
-| Test Client | Protected Server | TCP/8080 | Deny | 미허용 포트 차단 검증 |
-| Test Client | Protected Server | ICMP | 단계별 결정 | network 기본 진단 |
-| Protected Server | Internet | package repository | 설치 단계에서만 허용 | package 설치·업데이트 |
+```bash
+sudo ufw allow in on enp0s3 proto tcp from '<MANAGEMENT_HOST_IP>' to any port 22
+sudo ufw route allow in on enp0s1 out on enp0s2 proto tcp from 10.10.10.10 to 10.20.20.10 port 22
+sudo ufw default deny routed
+sudo ufw enable
+```
 
-이 표는 설계 초안이며 실제 적용 전 운영 목적과 테스트 범위를 다시 검토한다.
+`/etc/ufw/sysctl.conf`의 `net/ipv4/ip_forward=1`을 확인하고 `sudo sysctl -w net.ipv4.ip_forward=1` 및 `sudo ufw reload`로 적용했다. 관리 SSH 규칙을 먼저 추가하고 UFW 활성화 후 **새 SSH 세션**으로 접근 가능 여부를 확인했다. Client와 Server의 상대 대역 경로는 각 VM의 Netplan에 설정했으며, `netplan generate`와 `netplan try`로 검증했다.
 
-## 6. 확인해야 할 위험
+## 운영상 주의
 
-- 두 network interface의 순서를 잘못 지정하면 WAN과 LAN이 뒤바뀔 수 있다.
-- IP forwarding만 활성화하고 firewall 정책을 적용하지 않으면 불필요한 통신이 허용될 수 있다.
-- Suricata가 잘못된 interface를 감시하면 패킷이 지나가도 alert가 생성되지 않는다.
-- VM 복제 시 hostname, machine-id, SSH host key와 고정 IP가 충돌할 수 있다.
-- packet capture에는 IP, hostname, cookie 또는 request payload가 포함될 수 있으므로 원본을 바로 공개하지 않는다.
+- NIC 순서를 추측하지 않고 `ip -br address`와 UTM 연결을 대조한다.
+- SSH 관리 허용 규칙을 적용·확인한 다음 UFW를 활성화해 관리 접속을 유지한다.
+- 원본 패킷·로그에는 주소·MAC·계정 등 식별값이 포함될 수 있으므로 그대로 공개하지 않는다.
+- Suricata, nginx 및 패킷 캡처는 이 실습의 구성 요소가 아니다.

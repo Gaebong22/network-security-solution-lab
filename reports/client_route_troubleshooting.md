@@ -37,8 +37,8 @@ $ ip route get 10.20.20.10
 10.20.20.10 via 10.10.10.1 dev enp0s1 src 10.10.10.10 uid 1000
 ```
 
-이후 Client에서 Server로 SSH 접속·로그인에 성공했고 Server의 SSH 세션 출발지에서도 Client 주소 `10.10.10.10`을 확인했다. 따라서 경로 복구와 허용된 TCP/22 전달 통신까지 확인했다. 이 SSH 성공만으로 다른 포트의 허용 여부나 재부팅 후 지속성을 증명하지는 않는다.
+이후 Client에서 Server로 SSH 접속·로그인에 성공했고 Server의 SSH 세션 출발지에서도 Client 주소 `10.10.10.10`을 확인했다. 따라서 경로 복구와 허용된 TCP/22 전달 통신까지 확인했다. 이 SSH 성공만으로 다른 포트의 허용 여부나 재부팅 후 지속성을 증명하지는 않는다. [변경 전 출력 발췌](../evidence/before/client_route_before_redacted.md)도 별도로 보존했다.
 
-## 면접 설명 요점
+## 원인과 조치 요약
 
 같은 대역의 Gateway에는 ping이 됐지만 다른 대역의 Server에는 `Network is unreachable`이 나왔다. 서비스나 방화벽을 먼저 바꾸지 않고 Client 라우팅 테이블을 확인해 목적지 대역 경로가 없음을 찾았다. 정적 경로를 추가한 뒤 `ip route get`과 실제 SSH 로그인으로 재검증했다.
